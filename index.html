@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>画像分割＆D&D並び替え</title>
+<style>
+body {
+  font-family: sans-serif;
+  padding: 20px;
+}
+#controls {
+  margin-bottom: 10px;
+}
+#grid {
+  display: grid;
+  gap: 0;
+  margin-top: 20px;
+}
+.tile {
+  cursor: grab;
+  display: block;
+  outline: 1px solid #666;
+  outline-offset: -1px;
+}
+</style>
+</head>
+<body>
+
+<h2>画像分割＆ドラッグ入れ替え</h2>
+
+<div id="controls">
+  <input type="file" id="fileInput" accept="image/*">
+  横分割: <input type="number" id="cols" value="4" min="1">
+  縦分割: <input type="number" id="rows" value="4" min="1">
+  <button id="splitBtn">分割</button>
+  <button id="saveBtn">合成画像を保存</button>
+</div>
+
+<div id="grid"></div>
+
+<script>
+const fileInput = document.getElementById("fileInput");
+const splitBtn = document.getElementById("splitBtn");
+const saveBtn = document.getElementById("saveBtn");
+const grid = document.getElementById("grid");
+let img = new Image();
+let dragSrc = null;
+let tileW = 0;
+let tileH = 0;
+let cols = 0;
+let rows = 0;
+
+splitBtn.onclick = () => {
+  const file = fileInput.files[0];
+  if (!file) return alert("画像を選択してください");
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    img.onload = () => splitImage();
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+};
+
+saveBtn.onclick = () => {
+  if (!cols || !rows) return alert("先に分割してください");
+
+  const canvas = document.createElement("canvas");
+  canvas.width = tileW * cols;
+  canvas.height = tileH * rows;
+  const ctx = canvas.getContext("2d");
+
+  const tiles = [...grid.querySelectorAll("img")];
+
+  tiles.forEach((tile, i) => {
+    const x = (i % cols) * tileW;
+    const y = Math.floor(i / cols) * tileH;
+
+    const tempImg = new Image();
+    tempImg.src = tile.src;
+    tempImg.onload = () => {
+      ctx.drawImage(tempImg, x, y, tileW, tileH);
+
+      // 最後の1枚を描いたら保存
+      if (i === tiles.length - 1) {
+        const link = document.createElement("a");
+        link.download = "merged.png";
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+      }
+    };
+  });
+};
+
+function splitImage() {
+  cols = +document.getElementById("cols").value;
+  rows = +document.getElementById("rows").value;
+
+  grid.innerHTML = "";
+
+  tileW = img.width / cols;
+  tileH = img.height / rows;
+
+  grid.style.width = img.width + "px";
+  grid.style.gridTemplateColumns = `repeat(${cols}, ${tileW}px)`;
+
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  canvas.width = tileW;
+  canvas.height = tileH;
+
+  let tiles = [];
+
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      ctx.clearRect(0,0,tileW,tileH);
+      ctx.drawImage(
+        img,
+        x * tileW, y * tileH, tileW, tileH,
+        0, 0, tileW, tileH
+      );
+      tiles.push(canvas.toDataURL());
+    }
+  }
+
+  shuffle(tiles);
+
+  tiles.forEach(src => {
+    const tile = document.createElement("img");
+    tile.src = src;
+    tile.className = "tile";
+    tile.draggable = true;
+    tile.style.width = tileW + "px";
+    tile.style.height = tileH + "px";
+
+    tile.addEventListener("dragstart", () => dragSrc = tile);
+    tile.addEventListener("dragover", e => e.preventDefault());
+    tile.addEventListener("drop", e => {
+      e.preventDefault();
+      if (dragSrc !== tile) {
+        const tmp = tile.src;
+        tile.src = dragSrc.src;
+        dragSrc.src = tmp;
+      }
+    });
+
+    grid.appendChild(tile);
+  });
+}
+
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+}
+</script>
+
+</body>
+</html>
